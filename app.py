@@ -79,74 +79,53 @@ def run_bot():
     bot_error_msg = ""
     import time
     from binance.exceptions import BinanceAPIException
-    first_iteration = True
-    i = 0
-    retry_count = 0
     max_retry = 5
+    retry_count = 0
+    open_position = None
     while bot_running:
         try:
             best_funding = get_best_positive_funding()
-            first_coin = best_funding[i]
-            while not check_spot_availability(first_coin['pair']):
-                i += 1
-                first_coin = best_funding[i]
-            precision = get_precision(first_coin['pair'])
-            trade_volume = round(get_trade_volume(first_coin['pair']), precision)
-            if not check_open_positions(first_coin['pair']) and first_coin['rate'] > 1.0:
-                if first_iteration:
-                    client.futures_change_leverage(symbol=first_coin['pair'], leverage=1)
-                    client.order_market_buy(symbol=first_coin['pair'], quantity=trade_volume)
-                    client.futures_create_order(
-                        symbol=first_coin['pair'],
-                        side='SELL',
-                        type='MARKET',
-                        positionSide='SHORT',
-                        quantity=trade_volume,
-                        leverage=1
-                    )
-                else:
-                    first_iteration = False
-            if datetime.datetime.now() >= first_coin['next_funding_time']:
-                j = 0
-                actually_best_funding = get_best_positive_funding()
-                actually_first_coin = actually_best_funding[j]
-                while not check_spot_availability(actually_first_coin['pair']):
-                    j += 1
-                    actually_first_coin = actually_best_funding[j]
-                if (first_coin['rate'] < actually_first_coin['rate'] and
-                    first_coin['pair'] != actually_first_coin['pair'] and
-                    (first_coin['rate'] < 0.5 or actually_first_coin['rate'] > 1.0)):
-                    close_future_position(client, first_coin['pair'])
-                    close_spot_position(first_coin['pair'])
-                    spot_balance = client.get_asset_balance(asset='USDT')
-                    futures_balance = client.futures_account_balance()
-                    if float(spot_balance['free']) < 11:
-                        transfer_amount = 11 - float(spot_balance['free'])
-                        client.universal_transfer(type='UMFUTURE_MAIN', asset='USDT', amount=transfer_amount)
-                    elif float(spot_balance['free']) > 11:
-                        transfer_amount = float(spot_balance['free']) - 11
-                        client.universal_transfer(type='MAIN_UMFUTURE', asset='USDT', amount=transfer_amount)
-                    i = 0
-                    while not check_spot_availability(first_coin['pair']):
-                        i += 1
-                        first_coin = best_funding[i]
-                    precision = get_precision(first_coin['pair'])
-                    trade_volume = round(get_trade_volume(first_coin['pair']), precision)
-                    client.futures_change_leverage(symbol=first_coin['pair'], leverage=1)
-                    client.futures_create_order(
-                        symbol=first_coin['pair'],
-                        side='SELL',
-                        type='MARKET',
-                        positionSide='SHORT',
-                        quantity=trade_volume,
-                        leverage=1
-                    )
-                    client.order_market_buy(symbol=first_coin['pair'], quantity=trade_volume)
-                else:
-                    time.sleep(1800)
-            else:
+            if not best_funding:
                 time.sleep(1800)
-            retry_count = 0  # reset retry nếu thành công
+                continue
+            first_coin = best_funding[0]
+            symbol = first_coin['pair']
+            rate = first_coin['rate']
+            if rate < funding_threshold:
+                time.sleep(1800)
+                continue
+            precision = get_precision(symbol)
+            price = get_current_price(symbol)
+            # Lấy tổng vốn khả dụng USDT
+            spot_balance = float(client.get_asset_balance(asset='USDT')['free'])
+            futures_balance = 0.0
+            for b in client.futures_account_balance():
+                if b['asset'] == 'USDT':
+                    futures_balance = float(b['balance'])
+            total_capital = spot_balance + futures_balance
+            volume = round(total_capital / price, precision)
+            # Nếu chưa có vị thế thì mở mới
+            if not open_position or open_position['symbol'] != symbol or open_position['volume'] == 0:
+                client.futures_change_leverage(symbol=symbol, leverage=1)
+                client.order_market_buy(symbol=symbol, quantity=volume)
+                client.futures_create_order(
+                    symbol=symbol,
+                    side='SELL',
+                    type='MARKET',
+                    positionSide='SHORT',
+                    quantity=volume,
+                    leverage=1
+                )
+                open_position = {'symbol': symbol, 'volume': volume, 'entry': price, 'rate': rate}
+            else:
+                open_position['rate'] = rate
+            # Đóng vị thế nếu funding không còn tốt hoặc có cặp tốt hơn
+            if open_position and (open_position['symbol'] != symbol or rate < funding_threshold):
+                close_future_position(client, open_position['symbol'])
+                close_spot_position(open_position['symbol'])
+                open_position['volume'] = 0
+            time.sleep(1800)
+            retry_count = 0
         except BinanceAPIException as e:
             bot_status = "error"
             bot_error_msg = f'Binance API error: {e}'
@@ -345,23 +324,53 @@ def index():
         history=trade_history,
         backtest_result=None,
         start_date=None,
-        end_date=None
+        end_date=None,
+        funding_threshold=funding_threshold,
+        deposit=9.9,
+        target_annual_return=100,
+        fee=0.0004
     )
 
 @app.route("/backtest", methods=["POST"])
 def backtest():
     start_date = request.form.get("start_date")
     end_date = request.form.get("end_date")
+    funding_thres = request.form.get("funding_threshold", funding_threshold)
+    try:
+        funding_thres = float(funding_thres)
+    except:
+        funding_thres = funding_threshold
+    deposit = request.form.get("deposit", 9.9)
+    try:
+        deposit = float(deposit)
+    except:
+        deposit = 9.9
+    target_annual_return = request.form.get("target_annual_return", 100)
+    try:
+        target_annual_return = float(target_annual_return)
+    except:
+        target_annual_return = 100
+    fee = request.form.get("fee", 0.0004)
+    try:
+        fee = float(fee)
+    except:
+        fee = 0.0004
     # Luôn tải dữ liệu mới từ API trước khi backtest
     fetch_binance_data.main_download()
-    results = backtest_main_strategy.run_backtest_with_time_range(start_date, end_date)
+    results = backtest_main_strategy.run_backtest_with_time_range(
+        start_date, end_date, funding_thres, deposit, target_annual_return, fee
+    )
     return render_template(
         "index.html",
         positions=current_positions,
         history=trade_history,
         backtest_result=results,
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
+        funding_threshold=funding_thres,
+        deposit=deposit,
+        target_annual_return=target_annual_return,
+        fee=fee
     )
 
 if __name__ == "__main__":

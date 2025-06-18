@@ -13,7 +13,9 @@
         th { background: #eee; }
         .backtest-form { margin-bottom: 20px; }
         .result-table { background: #fafafa; }
+        .collapse-btn { cursor:pointer; font-size:18px; font-weight:bold; color:#007bff; border:none; background:none; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <div class="container">
@@ -49,21 +51,90 @@
             <label>Chọn khoảng thời gian: </label>
             <input type="date" name="start_date" value="{{ start_date }}" required>
             <input type="date" name="end_date" value="{{ end_date }}" required>
+            <br><br>
+            <label>Vốn ban đầu (USDT): </label>
+            <input type="number" name="deposit" min="1" step="0.01" value="{{ deposit if deposit is defined else 9.9 }}" style="width:100px">
+            <br><br>
+            <label>Mức % sinh lời mong muốn/năm: </label>
+            <input type="number" name="target_annual_return" min="1" max="1000" step="0.1" value="{{ target_annual_return if target_annual_return is defined else 100 }}" style="width:100px"> %
+            <br><br>
+            <label>Phí giao dịch (mỗi lệnh, dạng thập phân): </label>
+            <input type="number" name="fee" min="0" max="0.01" step="0.0001" value="{{ fee if fee is defined else 0.0004 }}" style="width:100px"> (ví dụ: 0.0004 = 0.04%)
+            <br><br>
+            <label>Ngưỡng funding rate vào lệnh: </label>
+            <input type="range" min="0.001" max="0.02" step="0.0005" name="funding_threshold" id="backtestFundingSlider" value="{{ funding_threshold if funding_threshold is defined else 0.003 }}" style="width:300px">
+            <span id="backtestFundingValue">{{ '%.4f'|format(funding_threshold if funding_threshold is defined else 0.003) }}</span>
+            <br>
             <button type="submit">Chạy backtest</button>
         </form>
+        <script>
+            var bslider = document.getElementById('backtestFundingSlider');
+            var boutput = document.getElementById('backtestFundingValue');
+            bslider.oninput = function() {
+                boutput.innerHTML = parseFloat(this.value).toFixed(4);
+            }
+        </script>
         {% if backtest_result %}
             <h4>Kết quả backtest:</h4>
-            <table class="result-table">
-                <tr><th>Thời gian</th><th>Số dư</th><th>Cặp</th></tr>
-                {% for r in backtest_result %}
-                    <tr>
-                        <td>{{ r['time'] }}</td>
-                        <td>{{ '%.5f'|format(r['balance']) }}</td>
-                        <td>{{ r['pair'] }}</td>
-                    </tr>
-                {% endfor %}
-            </table>
-            <p><b>Số dư cuối cùng:</b> {{ '%.5f'|format(backtest_result[-1]['balance']) }} USDT</p>
+            <canvas id="balanceChart" height="80"></canvas>
+            <script>
+                const ctx = document.getElementById('balanceChart').getContext('2d');
+                const chartData = {
+                    labels: [{{ backtest_result['history']|map(attribute='time')|map('string')|map('tojson')|join(',') }}],
+                    datasets: [{
+                        label: 'Tài sản (USDT)',
+                        data: [{{ backtest_result['history']|map(attribute='balance')|join(',') }}],
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0,123,255,0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                };
+                new Chart(ctx, {
+                    type: 'line',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false } }
+                    }
+                });
+            </script>
+            <p><b>Số dư cuối cùng:</b> {{ '%.5f'|format(backtest_result['history'][-1]['balance']) }} USDT</p>
+            <div style="margin-top:20px;">
+                <b>% sinh lời thực tế (năm):</b> {{ '%.2f'|format(backtest_result['annualized_return']*100) }}%<br>
+                <b>Số vốn cần có để đạt mức sinh lời mong muốn:</b> {{ '%.2f'|format(backtest_result['required_capital']) }} USDT<br>
+                <b>Drawdown lớn nhất:</b> {{ '%.2f'|format(backtest_result['max_drawdown']*100) }}%<br>
+                <b>Drawdown trung bình:</b> {{ '%.2f'|format(backtest_result['avg_drawdown']*100) }}%<br>
+                <b>Drawdown nhỏ nhất:</b> {{ '%.2f'|format(backtest_result['min_drawdown']*100) }}%<br>
+                <b>Vốn tối thiểu nên dùng:</b> {{ '%.2f'|format(backtest_result['min_capital']) }} USDT<br>
+                <b>Đòn bẩy khuyến nghị:</b> {{ '%.2f'|format(backtest_result['suggested_leverage']) }}x<br>
+                <b>Gợi ý khối lượng tối ưu (USDT):</b> {{ '%.2f'|format(backtest_result['suggested_volume']) }}
+            </div>
+            <button class="collapse-btn" onclick="toggleTradeLog()" id="toggleTradeBtn">+ Lịch sử đóng/mở lệnh backtest</button>
+            <div id="backtestTradeLog" style="display:none;">
+                <table class="result-table">
+                    <tr><th>Thời gian</th><th>Hành động</th><th>Cặp</th><th>Side</th><th>Khối lượng</th><th>Giá</th></tr>
+                    {% for t in backtest_result['trade_log'] %}
+                        <tr>
+                            <td>{{ t['time'] }}</td>
+                            <td>{{ t['action'] }}</td>
+                            <td>{{ t['pair'] }}</td>
+                            <td>{{ t['side'] }}</td>
+                            <td>{{ '%.4f'|format(t['volume']) }}</td>
+                            <td>{{ '%.4f'|format(t['price']) }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <script>
+                function toggleTradeLog() {
+                    var h = document.getElementById('backtestTradeLog');
+                    var btn = document.getElementById('toggleTradeBtn');
+                    if(h.style.display==='none') { h.style.display='block'; btn.innerText='- Ẩn lịch sử đóng/mở lệnh'; }
+                    else { h.style.display='none'; btn.innerText='+ Lịch sử đóng/mở lệnh backtest'; }
+                }
+            </script>
         {% endif %}
     </div>
 </div>
