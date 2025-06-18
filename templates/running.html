@@ -96,6 +96,35 @@
             </tr>
         </table>
     </div>
+    <div class="section">
+        <h3>Điều chỉnh ngưỡng Funding Rate vào lệnh</h3>
+        <input type="range" min="0.001" max="0.02" step="0.0005" value="{{ funding_threshold }}" id="fundingSlider" style="width:300px">
+        <span id="fundingValue">{{ '%.4f'|format(funding_threshold) }}</span>
+        <button onclick="updateFunding()" style="margin-left:10px;">Cập nhật</button>
+        <div id="fundingMsg" style="color:green;"></div>
+    </div>
+    <script>
+        var slider = document.getElementById('fundingSlider');
+        var output = document.getElementById('fundingValue');
+        slider.oninput = function() {
+            output.innerHTML = parseFloat(this.value).toFixed(4);
+        }
+        function updateFunding() {
+            fetch('/set_funding_threshold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'funding_threshold=' + slider.value
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    document.getElementById('fundingMsg').innerText = 'Đã cập nhật: ' + parseFloat(data.value).toFixed(4);
+                } else {
+                    document.getElementById('fundingMsg').innerText = 'Lỗi: ' + data.error;
+                }
+            });
+        }
+    </script>
 </div>
 </body>
 </html>

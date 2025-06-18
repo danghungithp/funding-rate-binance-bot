@@ -40,7 +40,7 @@ def get_best_positive_funding(funding_dict, t):
     candidates.sort(key=lambda x: x[1], reverse=True)
     return candidates[:10]
 
-def backtest_main_strategy(funding_dict, klines_dict, deposit=9.9, fee=0.0004):
+def backtest_main_strategy(funding_dict, klines_dict, deposit=9.9, fee=0.0004, funding_threshold=0.003):
     balance = deposit
     position = None
     results = []
@@ -58,20 +58,20 @@ def backtest_main_strategy(funding_dict, klines_dict, deposit=9.9, fee=0.0004):
             results.append({'time': t, 'balance': balance, 'pair': None})
             continue
         price = find_price_at_time(klines_dict[first_coin['pair']], t)
-        # Nếu chưa có vị thế và funding > 1%
-        if not position and first_coin['rate'] > 0.01:
+        # Nếu chưa có vị thế và funding > funding_threshold
+        if not position and first_coin['rate'] > funding_threshold:
             volume = balance / price
             balance -= volume * price * fee * 2  # phí mở 2 lệnh
-            position = {'pair': first_coin['pair'], 'volume': volume, 'price': price}
+            position = {'pair': first_coin['pair'], 'volume': volume, 'price': price, 'rate': first_coin['rate']}
         # Đến kỳ funding mới, kiểm tra có cặp tốt hơn không
-        elif position and (position['pair'] != first_coin['pair'] and first_coin['rate'] > 0.01 and first_coin['rate'] > position['rate']):
+        elif position and (position['pair'] != first_coin['pair'] and first_coin['rate'] > funding_threshold and first_coin['rate'] > position['rate']):
             # Đóng vị thế cũ
             balance -= position['volume'] * price * fee * 2  # phí đóng 2 lệnh
             position = None
             # Mở vị thế mới
             volume = balance / price
             balance -= volume * price * fee * 2
-            position = {'pair': first_coin['pair'], 'volume': volume, 'price': price}
+            position = {'pair': first_coin['pair'], 'volume': volume, 'price': price, 'rate': first_coin['rate']}
         # Nhận funding nếu đang giữ vị thế
         if position and position['pair'] == first_coin['pair']:
             funding_pnl = position['volume'] * price * first_coin['rate']

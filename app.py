@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import os
 import datetime
 import backtest_main_strategy
@@ -21,6 +21,9 @@ current_positions = []
 trade_history = []
 profit_loss = 0.0
 asset_total = 0.0
+
+# Thêm biến cấu hình funding rate threshold cho bot và backtest
+funding_threshold = 0.003  # mặc định 0.3%
 
 client = Client(api_key, api_secret)
 
@@ -253,6 +256,10 @@ def close_spot_position(symbol):
     if quantity > 0:
         client.order_market_sell(symbol=symbol, quantity=quantity)
 
+def get_funding_threshold():
+    global funding_threshold
+    return funding_threshold
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -292,7 +299,8 @@ def running():
         asset_total=asset_total,
         bot_running=bot_running,
         bot_status=bot_status,
-        bot_error_msg=bot_error_msg
+        bot_error_msg=bot_error_msg,
+        funding_threshold=get_funding_threshold()
     )
 
 @app.route('/start_bot', methods=['POST'])
@@ -318,6 +326,16 @@ def close_positions():
         return redirect(url_for('login'))
     close_all_positions()
     return redirect(url_for('running'))
+
+@app.route('/set_funding_threshold', methods=['POST'])
+def set_funding_threshold():
+    global funding_threshold
+    try:
+        value = float(request.form.get('funding_threshold', '0.003'))
+        funding_threshold = value
+        return jsonify({'success': True, 'value': funding_threshold})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route("/")
 def index():
