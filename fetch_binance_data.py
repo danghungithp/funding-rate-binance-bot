@@ -36,6 +36,15 @@ def save_klines_to_csv(data, filename):
             time_str = datetime.datetime.fromtimestamp(int(entry[0])/1000)
             writer.writerow([time_str, entry[1], entry[2], entry[3], entry[4], entry[5]])
 
+def main_download():
+    for symbol in symbols:
+        print(f"Đang tải dữ liệu cho {symbol}...")
+        funding_data = fetch_funding_rate(symbol)
+        save_funding_to_csv(funding_data, f"{symbol}_funding.csv")
+        klines_data = fetch_klines(symbol)
+        save_klines_to_csv(klines_data, f"{symbol}_klines.csv")
+    print("Đã lưu dữ liệu funding rate và giá về file CSV cho tất cả các cặp.")
+
 if __name__ == "__main__":
     for symbol in symbols:
         print(f"Đang tải dữ liệu cho {symbol}...")

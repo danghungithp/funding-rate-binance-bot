@@ -7,6 +7,7 @@ from config import api_key, api_secret
 from binance.client import Client
 import requests
 import math
+import fetch_binance_data
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_123'  # Đổi secret key khi dùng thật
@@ -333,7 +334,8 @@ def index():
 def backtest():
     start_date = request.form.get("start_date")
     end_date = request.form.get("end_date")
-    # Chạy backtest với khoảng thời gian được chọn
+    # Luôn tải dữ liệu mới từ API trước khi backtest
+    fetch_binance_data.main_download()
     results = backtest_main_strategy.run_backtest_with_time_range(start_date, end_date)
     return render_template(
         "index.html",
