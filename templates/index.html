@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Funding Rate Bot Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
+        .container { max-width: 900px; margin: 30px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+        h2 { margin-top: 0; }
+        .section { margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #eee; }
+        .backtest-form { margin-bottom: 20px; }
+        .result-table { background: #fafafa; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="section">
+        <h2>Trạng thái lệnh & Lịch sử giao dịch</h2>
+        <h4>Các cặp & lệnh đang nắm giữ:</h4>
+        <ul>
+            {% for pos in positions %}
+                <li>{{ pos }}</li>
+            {% else %}
+                <li>Không có vị thế nào</li>
+            {% endfor %}
+        </ul>
+        <h4>Lịch sử giao dịch:</h4>
+        <table>
+            <tr><th>Thời gian</th><th>Cặp</th><th>Loại lệnh</th><th>Khối lượng</th><th>Giá</th></tr>
+            {% for trade in history %}
+                <tr>
+                    <td>{{ trade.time }}</td>
+                    <td>{{ trade.pair }}</td>
+                    <td>{{ trade.type }}</td>
+                    <td>{{ trade.volume }}</td>
+                    <td>{{ trade.price }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">Chưa có giao dịch nào</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h2>Backtest chiến lược funding rate</h2>
+        <form class="backtest-form" method="post" action="/backtest">
+            <label>Chọn khoảng thời gian: </label>
+            <input type="date" name="start_date" value="{{ start_date }}" required>
+            <input type="date" name="end_date" value="{{ end_date }}" required>
+            <button type="submit">Chạy backtest</button>
+        </form>
+        {% if backtest_result %}
+            <h4>Kết quả backtest:</h4>
+            <table class="result-table">
+                <tr><th>Thời gian</th><th>Số dư</th><th>Cặp</th></tr>
+                {% for r in backtest_result %}
+                    <tr>
+                        <td>{{ r['time'] }}</td>
+                        <td>{{ '%.5f'|format(r['balance']) }}</td>
+                        <td>{{ r['pair'] }}</td>
+                    </tr>
+                {% endfor %}
+            </table>
+            <p><b>Số dư cuối cùng:</b> {{ '%.5f'|format(backtest_result[-1]['balance']) }} USDT</p>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>
