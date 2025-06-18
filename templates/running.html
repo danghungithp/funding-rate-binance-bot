@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bot Funding Rate - Running</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; }
+        .container { max-width: 900px; margin: 30px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+        h2 { margin-top: 0; }
+        .section { margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #eee; }
+        .btn { padding: 8px 18px; border: none; border-radius: 4px; font-size: 15px; margin-right: 8px; }
+        .btn-start { background: #28a745; color: #fff; }
+        .btn-stop { background: #dc3545; color: #fff; }
+        .btn-close { background: #ffc107; color: #333; }
+        .btn-logout { background: #007bff; color: #fff; float: right; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form method="post" action="/logout"><button class="btn btn-logout" type="submit">Đăng xuất</button></form>
+    <h2>Bot Funding Rate - Đang chạy</h2>
+    <div class="section">
+        <form method="post" action="/start_bot" style="display:inline;">
+            <button class="btn btn-start" type="submit" {% if bot_running %}disabled{% endif %}>Start Bot</button>
+        </form>
+        <form method="post" action="/stop_bot" style="display:inline;">
+            <button class="btn btn-stop" type="submit" {% if not bot_running %}disabled{% endif %}>Stop Bot</button>
+        </form>
+        <form method="post" action="/close_positions" style="display:inline;">
+            <button class="btn btn-close" type="submit">Đóng tất cả lệnh</button>
+        </form>
+    </div>
+    <div class="section">
+        <h3>Trạng thái tài sản</h3>
+        <table>
+            <tr><th>Lãi/Lỗ</th><th>Tổng tài sản</th></tr>
+            <tr>
+                <td>{{ '%.2f'|format(profit_loss) }} USDT</td>
+                <td>{{ '%.2f'|format(asset_total) }} USDT</td>
+            </tr>
+        </table>
+    </div>
+    <div class="section">
+        <h3>Các cặp/lệnh đang nắm giữ</h3>
+        <table>
+            <tr><th>Cặp</th><th>Side</th><th>Khối lượng</th><th>Giá vào lệnh</th></tr>
+            {% for pos in positions %}
+                <tr>
+                    <td>{{ pos.pair }}</td>
+                    <td>{{ pos.side }}</td>
+                    <td>{{ pos.volume }}</td>
+                    <td>{{ pos.entry }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4">Không có vị thế nào</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h3>Lịch sử giao dịch</h3>
+        <table>
+            <tr><th>Thời gian</th><th>Cặp</th><th>Loại lệnh</th><th>Khối lượng</th><th>Giá</th></tr>
+            {% for trade in history %}
+                <tr>
+                    <td>{{ trade.time }}</td>
+                    <td>{{ trade.pair }}</td>
+                    <td>{{ trade.type }}</td>
+                    <td>{{ trade.volume }}</td>
+                    <td>{{ trade.price }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5">Chưa có giao dịch nào</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h3>Trạng thái bot</h3>
+        <table>
+            <tr><th>Trạng thái</th><th>Thông báo lỗi</th></tr>
+            <tr>
+                <td>
+                    {% if bot_status == 'running' %}
+                        <span style="color:green;font-weight:bold">Đang chạy</span>
+                    {% elif bot_status == 'stopped' %}
+                        <span style="color:gray;font-weight:bold">Đã dừng</span>
+                    {% elif bot_status == 'error' %}
+                        <span style="color:red;font-weight:bold">Lỗi</span>
+                    {% else %}
+                        <span>{{ bot_status }}</span>
+                    {% endif %}
+                </td>
+                <td style="color:red">{{ bot_error_msg }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+</body>
+</html>
